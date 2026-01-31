@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: videochatroom-backend
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: MONGO_URI
+        sync: false
