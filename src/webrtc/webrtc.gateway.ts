@@ -121,8 +121,8 @@ export class WebRtcGateway
 
     @SubscribeMessage('video-action')
     handleVideoAction(client: Socket, payload: { roomId: string; action: string; data: any }): void {
-        this.logger.log(`Video action received in room ${payload.roomId}: ${payload.action}`);
-        client.to(payload.roomId).emit('video-action', payload);
+        this.logger.log(`Video action FORCE BROADCAST in room ${payload.roomId}: ${payload.action}`);
+        this.server.to(payload.roomId).emit('video-action', payload);
     }
 
     afterInit(server: Server) {
