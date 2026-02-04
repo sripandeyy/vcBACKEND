@@ -107,6 +107,9 @@ export class WebRtcGateway
     @SubscribeMessage('send-message')
     handleMessage(client: Socket, payload: { roomId: string; message: any }): void {
         const { roomId, message } = payload;
+        const roomSize = this.server.sockets.adapter.rooms.get(roomId)?.size || 0;
+        this.logger.log(`Received message in room ${roomId} (Size: ${roomSize}) from ${client.id}: ${JSON.stringify(message)}`);
+
         this.server.to(roomId).emit('receive-message', {
             ...message,
             socketId: client.id,
@@ -121,7 +124,8 @@ export class WebRtcGateway
 
     @SubscribeMessage('video-action')
     handleVideoAction(client: Socket, payload: { roomId: string; action: string; data: any }): void {
-        client.to(payload.roomId).emit('video-action', payload);
+        this.logger.log(`Video action FORCE BROADCAST in room ${payload.roomId}: ${payload.action}`);
+        this.server.to(payload.roomId).emit('video-action', payload);
     }
 
     afterInit(server: Server) {
