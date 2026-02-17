@@ -107,9 +107,7 @@ export class WebRtcGateway
     @SubscribeMessage('send-message')
     handleMessage(client: Socket, payload: { roomId: string; message: any }): void {
         const { roomId, message } = payload;
-        const roomSize = this.server.sockets.adapter.rooms.get(roomId)?.size || 0;
-        this.logger.log(`Received message in room ${roomId} (Size: ${roomSize}) from ${client.id}: ${JSON.stringify(message)}`);
-
+        this.logger.log(`Received message in room ${roomId} from ${client.id}: ${JSON.stringify(message)}`);
         this.server.to(roomId).emit('receive-message', {
             ...message,
             socketId: client.id,
