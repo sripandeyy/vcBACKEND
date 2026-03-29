@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as nodemailer from 'nodemailer';
 import { ConfigService } from '@nestjs/config';
+import * as dns from 'dns';
 import { Otp, OtpDocument } from '../schemas/otp.schema';
 import { User, UserDocument } from '../schemas/user.schema';
 
@@ -18,15 +19,18 @@ export class AuthService {
     this.transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // use STARTTLS (not SSL) — works on Render/cloud
+      secure: false, // STARTTLS
       auth: {
         user: this.configService.get<string>('EMAIL_USER'),
         pass: this.configService.get<string>('EMAIL_PASS'),
       },
       tls: {
-        rejectUnauthorized: false, // avoid cert issues on cloud
+        rejectUnauthorized: false,
       },
-      family: 4, // force IPv4 — prevents ENETUNREACH on Render
+      // Force IPv4 DNS resolution — Render blocks IPv6 SMTP connections
+      lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { ...options, family: 4 }, callback);
+      },
     });
   }
 
