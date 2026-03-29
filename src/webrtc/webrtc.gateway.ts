@@ -11,6 +11,8 @@ import { Socket, Server } from 'socket.io';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Room, RoomDocument } from '../schemas/room.schema';
+import { Chat, ChatDocument } from '../schemas/chat.schema';
+import { AuthService } from '../auth/auth.service';
 
 @WebSocketGateway({
     cors: {
@@ -22,7 +24,11 @@ export class WebRtcGateway
     @WebSocketServer() server: Server;
     private logger: Logger = new Logger('WebRtcGateway');
 
-    constructor(@InjectModel(Room.name) private roomModel: Model<RoomDocument>) { }
+    constructor(
+        @InjectModel(Room.name) private roomModel: Model<RoomDocument>,
+        @InjectModel(Chat.name) private chatModel: Model<ChatDocument>,
+        private readonly authService: AuthService,
+    ) { }
 
     // Keep track of users in rooms
     private rooms: Map<string, Set<string>> = new Map();
@@ -67,12 +73,25 @@ export class WebRtcGateway
             await room.save();
             this.logger.log(`Room data saved for ${roomId}`);
 
+            // Record call log directly on the User document
+            await this.authService.recordCallLog(userId, roomId);
+
             // Prepare active participants list with names
             const roomSet = this.rooms.get(roomId);
             if (roomSet) {
                 activeParticipants = room.participants
                     .filter(p => roomSet.has(p.socketId) && p.socketId !== client.id)
                     .map(p => ({ socketId: p.socketId, userName: p.userName }));
+            }
+
+            // Provide Chat History to the joining user
+            const chatHistory = await this.chatModel.find({ roomId }).sort({ createdAt: 1 }).limit(100).exec();
+            if (chatHistory.length > 0) {
+                client.emit('chat-history', chatHistory.map(chat => ({
+                    sender: chat.userName,
+                    text: chat.message,
+                    timestamp: chat.createdAt
+                })));
             }
 
         } catch (error) {
@@ -105,10 +124,23 @@ export class WebRtcGateway
     }
 
     @SubscribeMessage('send-message')
-    handleMessage(client: Socket, payload: { roomId: string; message: any }): void {
+    async handleMessage(client: Socket, payload: { roomId: string; message: any }): Promise<void> {
         const { roomId, message } = payload;
-        const roomSize = this.server.sockets.adapter.rooms.get(roomId)?.size || 0;
-        this.logger.log(`Received message in room ${roomId} (Size: ${roomSize}) from ${client.id}: ${JSON.stringify(message)}`);
+        this.logger.log(`Received message in room ${roomId} from ${client.id}: ${JSON.stringify(message)}`);
+        
+        // Find user by socketId to get their name/email
+        const room = await this.roomModel.findOne({ roomId });
+        const senderInfo = room?.participants.find(p => p.socketId === client.id);
+
+        if (senderInfo && senderInfo.userId.includes('@')) {
+            const newChat = new this.chatModel({
+                roomId,
+                userEmail: senderInfo.userId,
+                userName: senderInfo.userName,
+                message: message.text || JSON.stringify(message),
+            });
+            await newChat.save();
+        }
 
         this.server.to(roomId).emit('receive-message', {
             ...message,

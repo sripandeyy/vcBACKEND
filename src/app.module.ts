@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { WebRtcModule } from './webrtc/webrtc.module';
+import { AuthModule } from './auth/auth.module';
+import { ApiModule } from './api/api.module';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -20,7 +22,9 @@ import { AppService } from './app.service';
       },
       inject: [ConfigService],
     }),
-    WebRtcModule
+    WebRtcModule,
+    AuthModule,
+    ApiModule
   ],
   controllers: [AppController],
   providers: [AppService],
