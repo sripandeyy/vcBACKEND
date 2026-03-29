@@ -3,33 +3,43 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as nodemailer from 'nodemailer';
 import { ConfigService } from '@nestjs/config';
-import * as dns from 'dns';
 import { Otp, OtpDocument } from '../schemas/otp.schema';
 import { User, UserDocument } from '../schemas/user.schema';
+import { promisify } from 'util';
+import * as dns from 'dns';
+
+const resolve4 = promisify(dns.resolve4);
 
 @Injectable()
 export class AuthService {
-  private transporter: nodemailer.Transporter;
-
   constructor(
     @InjectModel(Otp.name) private otpModel: Model<OtpDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private configService: ConfigService,
-  ) {
-    this.transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
+  ) {}
+
+  /** Resolves smtp.gmail.com to an IPv4 address to avoid ENETUNREACH on Render */
+  private async getSmtpTransporter(): Promise<nodemailer.Transporter> {
+    let host = 'smtp.gmail.com';
+    try {
+      const addresses = await resolve4('smtp.gmail.com');
+      if (addresses && addresses.length > 0) {
+        host = addresses[0]; // use raw IPv4 IP — bypasses nodemailer DNS entirely
+      }
+    } catch {
+      // fallback to hostname if resolve4 fails
+    }
+    return nodemailer.createTransport({
+      host,
       port: 587,
-      secure: false, // STARTTLS
+      secure: false,
       auth: {
         user: this.configService.get<string>('EMAIL_USER'),
         pass: this.configService.get<string>('EMAIL_PASS'),
       },
       tls: {
         rejectUnauthorized: false,
-      },
-      // Force IPv4 DNS resolution — Render blocks IPv6 SMTP connections
-      lookup: (hostname, options, callback) => {
-        dns.lookup(hostname, { ...options, family: 4 }, callback);
+        servername: 'smtp.gmail.com', // required when connecting by IP
       },
     });
   }
@@ -54,7 +64,8 @@ export class AuthService {
           </div>`,
       };
 
-      await this.transporter.sendMail(mailOptions);
+      const transporter = await this.getSmtpTransporter();
+      await transporter.sendMail(mailOptions);
       return { success: true, message: 'OTP sent successfully!' };
     } catch (error) {
       console.error('Error sending OTP:', error);
