@@ -16,11 +16,17 @@ export class AuthService {
     private configService: ConfigService,
   ) {
     this.transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // use STARTTLS (not SSL) — works on Render/cloud
       auth: {
         user: this.configService.get<string>('EMAIL_USER'),
         pass: this.configService.get<string>('EMAIL_PASS'),
       },
+      tls: {
+        rejectUnauthorized: false, // avoid cert issues on cloud
+      },
+      family: 4, // force IPv4 — prevents ENETUNREACH on Render
     });
   }
 
